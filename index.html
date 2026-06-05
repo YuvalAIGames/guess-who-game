@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess Who Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .game-section {
+            display: none;
+        }
+        
+        .game-section.active {
+            display: block;
+        }
+        
+        .characters-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .character-btn {
+            padding: 20px;
+            border: 2px solid #ddd;
+            background: #f5f5f5;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1em;
+            font-weight: bold;
+        }
+        
+        .character-btn:hover {
+            border-color: #667eea;
+            background: #e8eaf6;
+            transform: translateY(-5px);
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: bold;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #764ba2;
+        }
+        
+        .result {
+            text-align: center;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .result.win {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .result.lose {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Guess Who?</h1>
+        
+        <!-- Player 1 Choose -->
+        <div class="game-section active" id="player1-section">
+            <h2>👤 Player 1: Choose a Character</h2>
+            <div class="characters-grid" id="characters-grid"></div>
+            <button onclick="startPlayer2()">Next (Player 2)</button>
+        </div>
+        
+        <!-- Player 2 Guess -->
+        <div class="game-section" id="player2-section">
+            <h2>🤔 Player 2: Guess the Character</h2>
+            <div class="input-group">
+                <label for="guess-input">Enter the character name:</label>
+                <input type="text" id="guess-input" placeholder="e.g., Alice">
+            </div>
+            <button onclick="checkGuess()">Submit Guess</button>
+            <div id="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const CHARACTERS = [
+            { id: 1, name: "Alice", hair: "black", eyes: "blue" },
+            { id: 2, name: "Sarah", hair: "red", eyes: "green" },
+            { id: 3, name: "Joseph", hair: "brown", eyes: "brown" },
+            { id: 4, name: "Leah", hair: "blonde", eyes: "blue" },
+            { id: 5, name: "David", hair: "gray", eyes: "gray" },
+            { id: 6, name: "Rina", hair: "black", eyes: "brown" }
+        ];
+        
+        let selectedCharacter = null;
+        
+        // Initialize the game
+        function init() {
+            const grid = document.getElementById('characters-grid');
+            grid.innerHTML = '';
+            
+            CHARACTERS.forEach(char => {
+                const btn = document.createElement('button');
+                btn.className = 'character-btn';
+                btn.textContent = `${char.name}\n📍 Hair: ${char.hair}, Eyes: ${char.eyes}`;
+                btn.onclick = () => selectCharacter(char);
+                grid.appendChild(btn);
+            });
+        }
+        
+        function selectCharacter(char) {
+            selectedCharacter = char;
+            alert(`✅ You chose ${char.name}. Remember it!`);
+        }
+        
+        function startPlayer2() {
+            if (!selectedCharacter) {
+                alert('❌ Please select a character first!');
+                return;
+            }
+            document.getElementById('player1-section').classList.remove('active');
+            document.getElementById('player2-section').classList.add('active');
+        }
+        
+        function checkGuess() {
+            const guess = document.getElementById('guess-input').value.trim();
+            const resultDiv = document.getElementById('result');
+            
+            if (!guess) {
+                alert('❌ Please enter a name!');
+                return;
+            }
+            
+            if (guess.toLowerCase() === selectedCharacter.name.toLowerCase()) {
+                resultDiv.className = 'result win';
+                resultDiv.innerHTML = `🎉 Correct! It was <strong>${selectedCharacter.name}</strong>!<br>🏆 Player 2 wins!`;
+            } else {
+                resultDiv.className = 'result lose';
+                resultDiv.innerHTML = `❌ Wrong! It was <strong>${selectedCharacter.name}</strong>.<br>🏆 Player 1 wins!`;
+            }
+            
+            setTimeout(() => {
+                location.reload();
+            }, 3000);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
