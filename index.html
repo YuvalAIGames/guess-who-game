@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guess Who Game</title>
+    <title>Guess Who Game - Multiplayer</title>
     <style>
         * {
             margin: 0;
@@ -19,6 +19,7 @@
             justify-content: center;
             align-items: center;
             padding: 20px;
+            direction: ltr;
         }
         
         .container {
@@ -28,10 +29,10 @@
             max-width: 600px;
             width: 100%;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
         }
         
         h1 {
-            text-align: center;
             color: #333;
             margin-bottom: 30px;
             font-size: 2.5em;
@@ -61,6 +62,7 @@
             transition: all 0.3s ease;
             font-size: 1em;
             font-weight: bold;
+            white-space: pre-line;
         }
         
         .character-btn:hover {
@@ -71,6 +73,7 @@
         
         .input-group {
             margin-bottom: 20px;
+            text-align: left;
         }
         
         label {
@@ -94,7 +97,7 @@
             border-color: #667eea;
         }
         
-        button {
+        button.action-btn {
             width: 100%;
             padding: 12px;
             background: #667eea;
@@ -108,8 +111,23 @@
             margin-top: 10px;
         }
         
-        button:hover {
+        button.action-btn:hover {
             background: #764ba2;
+        }
+
+        .role-btn {
+            margin: 10px;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background: #ff7e5f;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .role-btn:hover {
+            background: #feb47b;
         }
         
         .result {
@@ -130,32 +148,71 @@
             background: #f8d7da;
             color: #721c24;
         }
+
+        .status-msg {
+            font-size: 1.2em;
+            color: #555;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎮 Guess Who?</h1>
         
-        <!-- Player 1 Choose -->
-        <div class="game-section active" id="player1-section">
+        <div class="game-section active" id="role-section">
+            <h2>Select Your Role</h2>
+            <button class="role-btn" onclick="window.joinGame('p1')">Join as Player 1 (Chooser)</button>
+            <button class="role-btn" onclick="window.joinGame('p2')">Join as Player 2 (Guesser)</button>
+        </div>
+
+        <div class="game-section" id="player1-section">
             <h2>👤 Player 1: Choose a Character</h2>
             <div class="characters-grid" id="characters-grid"></div>
-            <button onclick="startPlayer2()">Next (Player 2)</button>
         </div>
         
-        <!-- Player 2 Guess -->
         <div class="game-section" id="player2-section">
             <h2>🤔 Player 2: Guess the Character</h2>
             <div class="input-group">
                 <label for="guess-input">Enter the character name:</label>
                 <input type="text" id="guess-input" placeholder="e.g., Alice">
             </div>
-            <button onclick="checkGuess()">Submit Guess</button>
-            <div id="result"></div>
+            <button class="action-btn" onclick="window.submitGuess()">Submit Guess</button>
+        </div>
+
+        <div class="game-section" id="waiting-section">
+            <h2 class="status-msg" id="waiting-msg">Waiting for the other player...</h2>
+        </div>
+
+        <div class="game-section" id="result-section">
+            <div id="result" class="result"></div>
+            <button class="action-btn" onclick="window.resetGame()">Play Again</button>
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-analytics.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDBbK3k9yAXwWZn6iM3dDrg3nY3Y1uRXLk",
+            authDomain: "nahesh-mi.firebaseapp.com",
+            projectId: "nahesh-mi",
+            storageBucket: "nahesh-mi.firebasestorage.app",
+            messagingSenderId: "474265582061",
+            appId: "1:474265582061:web:d21b525256d4c4b1ffcfe4",
+            measurementId: "G-E268ELN03F"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const db = getDatabase(app);
+        
+        // We use a specific path in the DB for our single game room
+        const gameRef = ref(db, 'game_room');
+
         const CHARACTERS = [
             { id: 1, name: "Alice", hair: "black", eyes: "blue" },
             { id: 2, name: "Sarah", hair: "red", eyes: "green" },
@@ -164,61 +221,120 @@
             { id: 5, name: "David", hair: "gray", eyes: "gray" },
             { id: 6, name: "Rina", hair: "black", eyes: "brown" }
         ];
-        
-        let selectedCharacter = null;
-        
-        // Initialize the game
-        function init() {
+
+        let myRole = null;
+        let globalGameState = null;
+
+        // Populate Characters Grid
+        function initGrid() {
             const grid = document.getElementById('characters-grid');
             grid.innerHTML = '';
             
             CHARACTERS.forEach(char => {
                 const btn = document.createElement('button');
                 btn.className = 'character-btn';
-                btn.textContent = `${char.name}\n📍 Hair: ${char.hair}, Eyes: ${char.eyes}`;
-                btn.onclick = () => selectCharacter(char);
+                btn.textContent = `${char.name}\n📍 Hair: ${char.hair}\n👀 Eyes: ${char.eyes}`;
+                btn.onclick = () => window.selectCharacter(char);
                 grid.appendChild(btn);
             });
         }
-        
-        function selectCharacter(char) {
-            selectedCharacter = char;
-            alert(`✅ You chose ${char.name}. Remember it!`);
+
+        // Switch visible sections
+        function showSection(sectionId) {
+            document.querySelectorAll('.game-section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
         }
-        
-        function startPlayer2() {
-            if (!selectedCharacter) {
-                alert('❌ Please select a character first!');
-                return;
-            }
-            document.getElementById('player1-section').classList.remove('active');
-            document.getElementById('player2-section').classList.add('active');
-        }
-        
-        function checkGuess() {
-            const guess = document.getElementById('guess-input').value.trim();
-            const resultDiv = document.getElementById('result');
+
+        // Global functions accessible from HTML onClick
+        window.joinGame = (role) => {
+            myRole = role;
+            initGrid();
             
+            // Listen to Realtime Database changes
+            onValue(gameRef, (snapshot) => {
+                const state = snapshot.val();
+                
+                // If the game doesn't exist yet, initialize it
+                if (!state) {
+                    window.resetGame();
+                    return;
+                }
+                
+                globalGameState = state;
+                updateUI();
+            });
+        };
+
+        window.selectCharacter = (char) => {
+            // Update Firebase state to show P1 chose a character
+            set(gameRef, {
+                status: 'guessing', // Move to guess phase
+                chosenCharacter: char.name,
+                winner: null
+            });
+        };
+
+        window.submitGuess = () => {
+            const guess = document.getElementById('guess-input').value.trim();
             if (!guess) {
                 alert('❌ Please enter a name!');
                 return;
             }
+
+            const isCorrect = guess.toLowerCase() === globalGameState.chosenCharacter.toLowerCase();
             
-            if (guess.toLowerCase() === selectedCharacter.name.toLowerCase()) {
-                resultDiv.className = 'result win';
-                resultDiv.innerHTML = `🎉 Correct! It was <strong>${selectedCharacter.name}</strong>!<br>🏆 Player 2 wins!`;
-            } else {
-                resultDiv.className = 'result lose';
-                resultDiv.innerHTML = `❌ Wrong! It was <strong>${selectedCharacter.name}</strong>.<br>🏆 Player 1 wins!`;
+            // Update Firebase with the result
+            set(gameRef, {
+                status: 'finished',
+                chosenCharacter: globalGameState.chosenCharacter,
+                winner: isCorrect ? 'p2' : 'p1'
+            });
+            
+            document.getElementById('guess-input').value = '';
+        };
+
+        window.resetGame = () => {
+            set(gameRef, {
+                status: 'choosing',
+                chosenCharacter: null,
+                winner: null
+            });
+        };
+
+        // Render UI based on current Firebase state and user Role
+        function updateUI() {
+            const status = globalGameState.status;
+
+            if (status === 'choosing') {
+                if (myRole === 'p1') {
+                    showSection('player1-section');
+                } else {
+                    document.getElementById('waiting-msg').innerText = "Waiting for Player 1 to choose a character...";
+                    showSection('waiting-section');
+                }
+            } 
+            else if (status === 'guessing') {
+                if (myRole === 'p2') {
+                    showSection('player2-section');
+                } else {
+                    document.getElementById('waiting-msg').innerText = "Character locked! Waiting for Player 2 to guess...";
+                    showSection('waiting-section');
+                }
+            } 
+            else if (status === 'finished') {
+                const resultDiv = document.getElementById('result');
+                const charName = globalGameState.chosenCharacter;
+                
+                if (globalGameState.winner === 'p2') {
+                    resultDiv.className = 'result win';
+                    resultDiv.innerHTML = `🎉 Correct! It was <strong>${charName}</strong>!<br>🏆 Player 2 wins!`;
+                } else {
+                    resultDiv.className = 'result lose';
+                    resultDiv.innerHTML = `❌ Wrong! It was <strong>${charName}</strong>.<br>🏆 Player 1 wins!`;
+                }
+                showSection('result-section');
             }
-            
-            setTimeout(() => {
-                location.reload();
-            }, 3000);
         }
-        
-        // Start the game
-        init();
     </script>
 </body>
 </html>
