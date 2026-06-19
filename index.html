@@ -124,10 +124,12 @@
             border: none;
             border-radius: 8px;
             cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
         }
 
         .role-btn:hover {
             background: #feb47b;
+            transform: scale(1.05);
         }
         
         .result {
@@ -162,8 +164,8 @@
         
         <div class="game-section active" id="role-section">
             <h2>Select Your Role</h2>
-            <button class="role-btn" onclick="window.joinGame('p1')">Join as Player 1 (Chooser)</button>
-            <button class="role-btn" onclick="window.joinGame('p2')">Join as Player 2 (Guesser)</button>
+            <button class="role-btn" onclick="joinGame('p1')">Join as Player 1 (Chooser)</button>
+            <button class="role-btn" onclick="joinGame('p2')">Join as Player 2 (Guesser)</button>
         </div>
 
         <div class="game-section" id="player1-section">
@@ -177,7 +179,7 @@
                 <label for="guess-input">Enter the character name:</label>
                 <input type="text" id="guess-input" placeholder="e.g., Alice">
             </div>
-            <button class="action-btn" onclick="window.submitGuess()">Submit Guess</button>
+            <button class="action-btn" onclick="submitGuess()">Submit Guess</button>
         </div>
 
         <div class="game-section" id="waiting-section">
@@ -186,15 +188,14 @@
 
         <div class="game-section" id="result-section">
             <div id="result" class="result"></div>
-            <button class="action-btn" onclick="window.resetGame()">Play Again</button>
+            <button class="action-btn" onclick="resetGame()">Play Again</button>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-analytics.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 
+    <script>
         const firebaseConfig = {
             apiKey: "AIzaSyDBbK3k9yAXwWZn6iM3dDrg3nY3Y1uRXLk",
             authDomain: "nahesh-mi.firebaseapp.com",
@@ -206,12 +207,9 @@
         };
 
         // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
-        const db = getDatabase(app);
-        
-        // We use a specific path in the DB for our single game room
-        const gameRef = ref(db, 'game_room');
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const gameRef = db.ref('game_room');
 
         const CHARACTERS = [
             { id: 1, name: "Alice", hair: "black", eyes: "blue" },
@@ -225,7 +223,6 @@
         let myRole = null;
         let globalGameState = null;
 
-        // Populate Characters Grid
         function initGrid() {
             const grid = document.getElementById('characters-grid');
             grid.innerHTML = '';
@@ -234,47 +231,45 @@
                 const btn = document.createElement('button');
                 btn.className = 'character-btn';
                 btn.textContent = `${char.name}\n📍 Hair: ${char.hair}\n👀 Eyes: ${char.eyes}`;
-                btn.onclick = () => window.selectCharacter(char);
+                btn.onclick = () => selectCharacter(char);
                 grid.appendChild(btn);
             });
         }
 
-        // Switch visible sections
         function showSection(sectionId) {
             document.querySelectorAll('.game-section').forEach(sec => sec.classList.remove('active'));
             document.getElementById(sectionId).classList.add('active');
         }
 
-        // Global functions accessible from HTML onClick
-        window.joinGame = (role) => {
+        function joinGame(role) {
             myRole = role;
             initGrid();
             
             // Listen to Realtime Database changes
-            onValue(gameRef, (snapshot) => {
+            gameRef.on('value', (snapshot) => {
                 const state = snapshot.val();
                 
                 // If the game doesn't exist yet, initialize it
                 if (!state) {
-                    window.resetGame();
+                    resetGame();
                     return;
                 }
                 
                 globalGameState = state;
                 updateUI();
             });
-        };
+        }
 
-        window.selectCharacter = (char) => {
-            // Update Firebase state to show P1 chose a character
-            set(gameRef, {
-                status: 'guessing', // Move to guess phase
+        function selectCharacter(char) {
+            // Update Firebase state
+            gameRef.set({
+                status: 'guessing',
                 chosenCharacter: char.name,
                 winner: null
             });
-        };
+        }
 
-        window.submitGuess = () => {
+        function submitGuess() {
             const guess = document.getElementById('guess-input').value.trim();
             if (!guess) {
                 alert('❌ Please enter a name!');
@@ -284,25 +279,27 @@
             const isCorrect = guess.toLowerCase() === globalGameState.chosenCharacter.toLowerCase();
             
             // Update Firebase with the result
-            set(gameRef, {
+            gameRef.set({
                 status: 'finished',
                 chosenCharacter: globalGameState.chosenCharacter,
                 winner: isCorrect ? 'p2' : 'p1'
             });
             
             document.getElementById('guess-input').value = '';
-        };
+        }
 
-        window.resetGame = () => {
-            set(gameRef, {
+        function resetGame() {
+            gameRef.set({
                 status: 'choosing',
                 chosenCharacter: null,
                 winner: null
             });
-        };
+        }
 
         // Render UI based on current Firebase state and user Role
         function updateUI() {
+            if (!globalGameState) return;
+            
             const status = globalGameState.status;
 
             if (status === 'choosing') {
