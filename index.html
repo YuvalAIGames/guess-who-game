@@ -2,93 +2,112 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>נחש מי? - מערכת חדרים</title>
+    <title>נחש מי? - משחקי חדרים</title>
     <style>
-        body { font-family: sans-serif; background: #1e3c72; color: white; display: flex; justify-content: center; padding: 20px; }
-        .container { background: white; color: #333; padding: 20px; border-radius: 15px; width: 100%; max-width: 600px; }
-        .room-section { text-align: center; }
-        input { padding: 10px; width: 80%; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; }
-        button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        #game-area { display: none; }
+        body { font-family: sans-serif; background: #1e3c72; color: #333; padding: 20px; display: flex; justify-content: center; }
+        .container { background: white; padding: 30px; border-radius: 20px; width: 100%; max-width: 900px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .hidden { display: none; }
+        
+        /* Board */
+        .game-layout { display: flex; gap: 20px; }
+        .board { flex: 2; display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+        .char-card { border: 1px solid #999; padding: 5px; text-align: center; cursor: pointer; border-radius: 5px; }
+        .eliminated { background: #eee; opacity: 0.4; }
+        
+        /* Chat */
+        .chat { flex: 1; border: 2px solid #ccc; padding: 10px; border-radius: 10px; display: flex; flex-direction: column; height: 400px; }
+        #messages { flex: 1; overflow-y: auto; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- מסך כניסה לחדר -->
-        <div id="room-section" class="room-section">
-            <h1>ברוכים הבאים ל"נחש מי?"</h1>
-            <input type="text" id="room-code" placeholder="הכנס קוד חדר (למשל: EitanHouse)">
-            <br>
-            <button onclick="enterRoom()">היכנס לחדר</button>
-        </div>
 
-        <!-- אזור המשחק -->
-        <div id="game-area">
-            <h2 id="room-display"></h2>
-            <div id="chat-box" style="height: 200px; border: 1px solid #ccc; overflow-y: scroll; margin-bottom: 10px; padding: 5px;"></div>
-            <input type="text" id="msg-input" placeholder="כתוב הודעה...">
-            <button onclick="sendMessage()">שלח והעבר תור</button>
-            <p id="turn-status"></p>
-        </div>
+<div class="container">
+    <!-- מסך כניסה -->
+    <div id="lobby">
+        <h1>🔍 נחש מי? - כניסה לחדר</h1>
+        <input type="text" id="room-code" placeholder="הכנס קוד חדר (למשל: hila123)">
+        <button onclick="enterRoom()">התחל לשחק</button>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
-    <script>
-        firebase.initializeApp({ databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com" });
-        let db = firebase.database();
-        let roomRef, myRole;
+    <!-- מסך משחק -->
+    <div id="game-area" class="hidden">
+        <h2 id="room-name"></h2>
+        <div class="game-layout">
+            <div class="board" id="board"></div>
+            <div class="chat">
+                <div id="turn-indicator" style="font-weight:bold; color:red;"></div>
+                <div id="messages"></div>
+                <input type="text" id="msg-input" placeholder="הקלד הודעה...">
+                <button onclick="sendMessage()">שלח והעבר תור</button>
+            </div>
+        </div>
+    </div>
+</div>
 
-        function enterRoom() {
-            const code = document.getElementById('room-code').value.trim();
-            if(!code) return alert("חובה להכניס קוד!");
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+<script>
+    firebase.initializeApp({ databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com" });
+    const db = firebase.database();
+    let roomRef, myRole;
+
+    const chars = ["אלכס", "אניטה", "ברנרד", "צ'ארלס", "קלייר", "דויד", "אריק", "פראנס", "ג'ורג'", "הרמן", "ג'ו", "מריה", "מקס", "פול", "פיטר", "פיליפ", "ריצ'רד", "רוברט", "סם", "סוזן", "טום", "ליאו", "מייק", "נינה"];
+
+    function enterRoom() {
+        const code = document.getElementById('room-code').value.trim();
+        if(!code) return;
+        
+        document.getElementById('lobby').classList.add('hidden');
+        document.getElementById('game-area').classList.remove('hidden');
+        document.getElementById('room-name').innerText = "חדר: " + code;
+        roomRef = db.ref('rooms/' + code);
+
+        roomRef.transaction(room => {
+            if(!room) return { p1: true, currentTurn: 'p1' };
+            if(!room.p2) return { ...room, p2: true };
+            return room;
+        }, (err, comm, snap) => {
+            myRole = snap.child('p2').exists() ? 'p2' : 'p1';
+            initGame();
+        });
+    }
+
+    function initGame() {
+        // בניית לוח דמויות
+        const board = document.getElementById('board');
+        chars.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'char-card';
+            div.innerText = name;
+            div.onclick = function() { this.classList.toggle('eliminated'); };
+            board.appendChild(div);
+        });
+
+        // האזנה לעדכונים
+        roomRef.on('value', snap => {
+            const data = snap.val();
+            const isMyTurn = data.currentTurn === myRole;
+            document.getElementById('turn-indicator').innerText = isMyTurn ? "זה התור שלך!" : "מחכה ליריב...";
             
-            document.getElementById('room-section').style.display = 'none';
-            document.getElementById('game-area').style.display = 'block';
-            document.getElementById('room-display').innerText = "חדר: " + code;
+            const msgs = document.getElementById('messages');
+            msgs.innerHTML = '';
+            if(data.messages) {
+                Object.values(data.messages).forEach(m => {
+                    msgs.innerHTML += `<p><b>${m.sender}:</b> ${m.text}</p>`;
+                });
+            }
+        });
+    }
 
-            // יצירת נתיב ייחודי לחדר
-            roomRef = db.ref('rooms/' + code);
-
-            // קביעת תפקיד (שחקן ראשון שנכנס הוא p1, שני הוא p2)
-            roomRef.transaction(function(room) {
-                if (!room) {
-                    return { p1: true, currentTurn: 'p1', turnCount: 0 };
-                }
-                if (!room.p2) {
-                    return { ...room, p2: true };
-                }
-                return room;
-            }, function(error, committed, snapshot) {
-                myRole = snapshot.child('p2').exists() ? 'p2' : 'p1';
-                listenToGame();
-            });
-        }
-
-        function listenToGame() {
-            roomRef.on('value', snap => {
-                const data = snap.val();
-                document.getElementById('chat-box').innerHTML = '';
-                if(data.messages) {
-                    Object.values(data.messages).forEach(m => {
-                        document.getElementById('chat-box').innerHTML += `<p><b>${m.sender}:</b> ${m.text}</p>`;
-                    });
-                }
-                
-                const isMyTurn = data.currentTurn === myRole;
-                document.getElementById('turn-status').innerText = isMyTurn ? "זה תורך!" : "מחכה ליריב...";
-                document.getElementById('msg-input').disabled = !isMyTurn;
-            });
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('msg-input');
-            const nextTurn = myRole === 'p1' ? 'p2' : 'p1';
-            
-            roomRef.child('messages').push({ sender: myRole, text: input.value });
-            roomRef.update({ currentTurn: nextTurn, turnCount: firebase.database.ServerValue.INCREMENT });
-            input.value = '';
-        }
-    </script>
+    function sendMessage() {
+        const input = document.getElementById('msg-input');
+        if(!input.value) return;
+        
+        const nextTurn = myRole === 'p1' ? 'p2' : 'p1';
+        roomRef.child('messages').push({ sender: myRole, text: input.value });
+        roomRef.update({ currentTurn: nextTurn });
+        input.value = '';
+    }
+</script>
 </body>
 </html>
