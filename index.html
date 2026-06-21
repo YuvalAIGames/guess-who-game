@@ -13,11 +13,14 @@
         .hidden { display: none; }
         .chat { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; text-align: right; }
         button { cursor: pointer; }
+        #error-box { color: red; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <div id="error-box"></div>
+
     <div id="room-setup">
         <h1>נחש מי? - גרסת המנהלים</h1>
         <input type="text" id="room-code" placeholder="שם חדר...">
@@ -49,13 +52,32 @@
     </div>
 </div>
 
+<script>
+    // מערכת ללכידת שגיאות קריסה
+    window.onerror = function(msg, url, line) {
+        document.getElementById('error-box').innerText = "קריסת מערכת: " + msg;
+        return false;
+    };
+</script>
+
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 <script>
-    firebase.initializeApp({ databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com" });
+    if (typeof firebase === 'undefined') {
+        document.getElementById('error-box').innerText = "שגיאה: פיירבייס לא נטען. האם יש לך חוסם פרסומות פועל שמסתיר סקריפטים?";
+    }
+
+    try {
+        firebase.initializeApp({ 
+            databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com",
+            projectId: "nahesh-mi"
+        });
+    } catch (e) {
+        document.getElementById('error-box').innerText = "שגיאה בהפעלת פיירבייס: " + e.message;
+    }
+    
     const db = firebase.database();
     
-    // רשימת הדמויות המעודכנת עם אימוג'ים יצירתיים לפי התפקיד של כל מנהל
     const CHARS = [
         {n:"הילה", e:"👑"}, {n:"ירין", e:"⚖️"}, {n:"ריי", e:"🎨"}, {n:"אורי", e:"🎯"}, 
         {n:"לי-אור", e:"🫂"}, {n:"איתן", e:"🔥"}, {n:"רני", e:"⚡"}, {n:"נעמי", e:"🏆"}, 
@@ -67,65 +89,75 @@
     let roomRef, myRole, roomCode;
 
     function enterRoom() {
-        roomCode = document.getElementById('room-code').value.trim();
-        if (!roomCode) return alert("אנא הכנס שם חדר");
-        
-        roomRef = db.ref('rooms/' + roomCode);
-        document.getElementById('room-setup').classList.add('hidden');
-        document.getElementById('character-selection').classList.remove('hidden');
-        
-        const grid = document.getElementById('select-grid');
-        grid.innerHTML = ''; 
-        CHARS.forEach(c => {
-            const div = document.createElement('div');
-            div.className = 'card';
-            div.innerHTML = `<span style="font-size: 1.5em;">${c.e}</span><br><b>${c.n}</b>`;
-            div.onclick = () => selectMyCharacter(c.n);
-            grid.appendChild(div);
-        });
-
-        roomRef.on('value', s => {
-            const data = s.val();
-            if(data && data.messages) {
-                const chat = document.getElementById('chat');
-                chat.innerHTML = Object.values(data.messages).map(m => {
-                    const senderName = m.sender === 'p1' ? 'שחקן 1' : (m.sender === 'p2' ? 'שחקן 2' : 'אורח');
-                    return `<p style="margin: 5px 0;"><b>${senderName}:</b> ${m.text}</p>`;
-                }).join('');
-                chat.scrollTop = chat.scrollHeight; 
-            }
-        });
-    }
-
-    function selectMyCharacter(name) {
-        roomRef.transaction(room => {
-            if(!room) {
-                return { p1: {char: name}, currentTurn: 'p1' };
-            }
-            if(!room.p2) {
-                room.p2 = {char: name};
-                return room;
-            }
-            return room;
-        }, (error, committed, snapshot) => {
-            if (error) {
-                console.error("שגיאת התחברות לחדר:", error);
-                alert("שגיאה! האם פתחת את הרשאות ה-Rules בפיירבייס?");
+        try {
+            roomCode = document.getElementById('room-code').value.trim();
+            if (!roomCode) {
+                alert("אנא הכנס שם חדר");
                 return;
             }
             
-            const data = snapshot.val();
-            if (data && data.p1 && data.p1.char === name && (!data.p2 || data.p2.char !== name)) {
-                myRole = 'p1';
-            } else {
-                myRole = 'p2';
-            }
+            roomRef = db.ref('rooms/' + roomCode);
+            document.getElementById('room-setup').classList.add('hidden');
+            document.getElementById('character-selection').classList.remove('hidden');
+            
+            const grid = document.getElementById('select-grid');
+            grid.innerHTML = ''; 
+            CHARS.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.innerHTML = `<span style="font-size: 1.5em;">${c.e}</span><br><b>${c.n}</b>`;
+                div.onclick = () => selectMyCharacter(c.n);
+                grid.appendChild(div);
+            });
 
-            document.getElementById('character-selection').classList.add('hidden');
-            document.getElementById('game-play').classList.remove('hidden');
-            document.getElementById('room-title').innerText = "חדר: " + roomCode;
-            initBoard();
-        });
+            roomRef.on('value', s => {
+                const data = s.val();
+                if(data && data.messages) {
+                    const chat = document.getElementById('chat');
+                    chat.innerHTML = Object.values(data.messages).map(m => {
+                        const senderName = m.sender === 'p1' ? 'שחקן 1' : (m.sender === 'p2' ? 'שחקן 2' : 'אורח');
+                        return `<p style="margin: 5px 0;"><b>${senderName}:</b> ${m.text}</p>`;
+                    }).join('');
+                    chat.scrollTop = chat.scrollHeight; 
+                }
+            });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאה בכניסה: " + error.message;
+        }
+    }
+
+    function selectMyCharacter(name) {
+        try {
+            roomRef.transaction(room => {
+                if(!room) {
+                    return { p1: {char: name}, currentTurn: 'p1' };
+                }
+                if(!room.p2) {
+                    room.p2 = {char: name};
+                    return room;
+                }
+                return room;
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    document.getElementById('error-box').innerText = "שגיאת התחברות למסד: " + error.message;
+                    return;
+                }
+                
+                const data = snapshot.val();
+                if (data && data.p1 && data.p1.char === name && (!data.p2 || data.p2.char !== name)) {
+                    myRole = 'p1';
+                } else {
+                    myRole = 'p2';
+                }
+
+                document.getElementById('character-selection').classList.add('hidden');
+                document.getElementById('game-play').classList.remove('hidden');
+                document.getElementById('room-title').innerText = "חדר: " + roomCode;
+                initBoard();
+            });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאה בבחירת דמות: " + error.message;
+        }
     }
 
     function initBoard() {
@@ -136,4 +168,62 @@
         CHARS.forEach(c => {
             const div = document.createElement('div');
             div.className = 'card';
-            div.innerHTML = `<span style="font-size: 1.5em;">${c.e}</span><br>
+            div.innerHTML = `<span style="font-size: 1.5em;">${c.e}</span><br><b>${c.n}</b>`;
+            div.onclick = function() { this.classList.toggle('eliminated'); };
+            grid.appendChild(div);
+            select.innerHTML += `<option value="${c.n}">${c.n}</option>`;
+        });
+    }
+
+    function sendMessage() {
+        try {
+            const msgInput = document.getElementById('msg-input');
+            const msg = msgInput.value.trim();
+            if (!msg) return; 
+            
+            const sender = myRole || 'unknown'; 
+            
+            roomRef.child('messages').push({sender: sender, text: msg})
+                .then(() => {
+                    roomRef.once('value', s => {
+                        const data = s.val();
+                        if(data && data.currentTurn) {
+                            roomRef.update({currentTurn: data.currentTurn === 'p1' ? 'p2' : 'p1'});
+                        }
+                    });
+                    msgInput.value = '';
+                })
+                .catch(error => {
+                    document.getElementById('error-box').innerText = "שגיאה בשליחת הודעה: " + error.message;
+                });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאת הודעה: " + error.message;
+        }
+    }
+
+    function makeGuess() {
+        try {
+            const guess = document.getElementById('guess-select').value;
+            roomRef.once('value', s => {
+                const data = s.val();
+                if (!data) return;
+                
+                const opponent = myRole === 'p1' ? 'p2' : 'p1';
+                if(!data[opponent]) {
+                    alert("השחקן השני טרם בחר דמות!");
+                    return;
+                }
+                
+                if(data[opponent].char === guess) {
+                    alert("🎉 ניצחת! הדמות אכן הייתה " + guess);
+                } else {
+                    alert("❌ טעות! הדמות הייתה " + data[opponent].char);
+                }
+            });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאה בניחוש: " + error.message;
+        }
+    }
+</script>
+</body>
+</html>
