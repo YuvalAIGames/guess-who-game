@@ -1,3 +1,54 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>נחש מי? - המשחק המלא</title>
+    <style>
+        body { font-family: sans-serif; background: #1e3c72; color: #333; padding: 20px; text-align: center; }
+        .container { background: white; padding: 20px; border-radius: 20px; max-width: 900px; margin: auto; }
+        .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 20px 0; }
+        .card { border: 2px solid #ccc; padding: 10px; cursor: pointer; border-radius: 10px; transition: 0.2s; }
+        .card:hover { border-color: #3b82f6; }
+        .eliminated { opacity: 0.2; transform: scale(0.9); }
+        .hidden { display: none; }
+        .chat { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; text-align: right; }
+        button { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="room-setup">
+        <h1>נחש מי? - חדרים</h1>
+        <input type="text" id="room-code" placeholder="שם חדר...">
+        <button onclick="enterRoom()" style="padding: 5px 15px;">היכנס</button>
+    </div>
+
+    <div id="character-selection" class="hidden">
+        <h2>בחר את הדמות שלך</h2>
+        <div id="select-grid" class="grid"></div>
+    </div>
+
+    <div id="game-play" class="hidden">
+        <h2 id="room-title"></h2>
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 2;">
+                <h3>הלוח שלך</h3>
+                <div id="board-grid" class="grid"></div>
+                <select id="guess-select" style="padding: 5px;"></select>
+                <button onclick="makeGuess()" style="background: red; color: white; padding: 5px 10px; border: none; border-radius: 5px;">בצע ניחוש סופי!</button>
+            </div>
+            <div style="flex: 1;">
+                <div id="chat" class="chat"></div>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="msg-input" placeholder="שאל/ענה..." style="flex: 1; padding: 5px;">
+                    <button onclick="sendMessage()" style="padding: 5px 10px;">שלח</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 <script>
@@ -16,7 +67,7 @@
     let roomRef, myRole, roomCode;
 
     function enterRoom() {
-        roomCode = document.getElementById('room-code').value;
+        roomCode = document.getElementById('room-code').value.trim();
         if (!roomCode) return alert("אנא הכנס שם חדר");
         
         roomRef = db.ref('rooms/' + roomCode);
@@ -33,14 +84,13 @@
             grid.appendChild(div);
         });
 
-        // האזנה לשינויים במסד הנתונים
         roomRef.on('value', s => {
             const data = s.val();
             if(data && data.messages) {
                 const chat = document.getElementById('chat');
                 chat.innerHTML = Object.values(data.messages).map(m => {
                     const senderName = m.sender === 'p1' ? 'שחקן 1' : (m.sender === 'p2' ? 'שחקן 2' : 'אורח');
-                    return `<p><b>${senderName}:</b> ${m.text}</p>`;
+                    return `<p style="margin: 5px 0;"><b>${senderName}:</b> ${m.text}</p>`;
                 }).join('');
                 chat.scrollTop = chat.scrollHeight; 
             }
@@ -98,7 +148,6 @@
         const msg = msgInput.value.trim();
         if (!msg) return; 
         
-        // וידוא שהתפקיד מוגדר כדי למנוע קריסה של פיירבייס
         const sender = myRole || 'unknown'; 
         
         roomRef.child('messages').push({sender: sender, text: msg})
@@ -129,8 +178,13 @@
                 return;
             }
             
-            if(data[opponent].char === guess) alert("ניצחת! הדמות הייתה " + guess);
-            else alert("טעות! הדמות הייתה " + data[opponent].char);
+            if(data[opponent].char === guess) {
+                alert("🎉 ניצחת! הדמות הייתה " + guess);
+            } else {
+                alert("❌ טעות! הדמות הייתה " + data[opponent].char);
+            }
         });
     }
 </script>
+</body>
+</html>
