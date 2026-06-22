@@ -4,31 +4,44 @@
     <meta charset="UTF-8">
     <title>טורניר "נחש מי" - מנהלים</title>
     <style>
-        body { font-family: sans-serif; background: #1e3c72; color: #fff; padding: 20px; text-align: center; }
-        .container { background: white; color: #333; padding: 20px; border-radius: 20px; max-width: 900px; margin: auto; }
-        .card { border: 2px solid #ccc; padding: 10px; cursor: pointer; border-radius: 10px; display: inline-block; margin: 5px; width: 100px; }
-        .spectator { background: #eee; border: 2px dashed #999; }
+        body { font-family: sans-serif; background: #1e3c72; color: #333; padding: 20px; text-align: center; }
+        .container { background: white; padding: 20px; border-radius: 20px; max-width: 900px; margin: auto; }
+        .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 20px 0; }
+        .card { border: 2px solid #ccc; padding: 10px; cursor: pointer; border-radius: 10px; font-size: 1.2em; transition: 0.2s; }
+        .card:hover { border-color: #3b82f6; background: #f0f8ff; }
+        .eliminated { opacity: 0.2; transform: scale(0.9); }
         .hidden { display: none; }
-        .chat { height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; text-align: right; margin-bottom: 10px; }
+        .chat { height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; text-align: right; }
+        #leaderboard { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #1e3c72; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="lobby">
-        <h1>🏆 טורניר המנהלים 🏆</h1>
-        <input type="text" id="room-code" placeholder="שם חדר למשחק...">
-        <button onclick="joinRoom(false)">היכנס כשחקן</button>
-        <button onclick="joinRoom(true)">צפה בחדר</button>
+    <!-- טבלת ניצחונות -->
+    <div id="leaderboard">
+        <h3>🏆 טבלת הניצחונות של הטורניר 🏆</h3>
+        <div id="leaderboard-list" style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;"></div>
     </div>
 
+    <!-- לובּי -->
+    <div id="lobby">
+        <h1>נחש מי? - גרסת הטורניר</h1>
+        <input type="text" id="room-code" placeholder="שם חדר...">
+        <button onclick="joinRoom(false)">שחקן</button>
+        <button onclick="joinRoom(true)">צופה</button>
+    </div>
+
+    <!-- אזור המשחק -->
     <div id="game-area" class="hidden">
-        <h2 id="room-name"></h2>
-        <div id="board-grid"></div>
-        <div id="chat" class="chat"></div>
-        <div id="controls">
-            <input type="text" id="msg-input" placeholder="כתוב הודעה...">
+        <h2 id="room-title"></h2>
+        <div class="grid" id="board-grid"></div>
+        <div class="chat" id="chat"></div>
+        <div id="player-controls">
+            <input type="text" id="msg-input" placeholder="שאל/ענה...">
             <button onclick="sendMessage()">שלח</button>
+            <select id="guess-select"></select>
+            <button onclick="makeGuess()" style="background: red; color: white;">ניחוש סופי!</button>
         </div>
     </div>
 </div>
@@ -38,44 +51,71 @@
 <script>
     firebase.initializeApp({ databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com" });
     const db = firebase.database();
-    let isSpectator = false;
-    let roomRef;
+    const CHARS = [
+        {n:"הילה", e:"👑"}, {n:"ירין", e:"⚖️"}, {n:"ריי", e:"🎨"}, {n:"אורי", e:"🎯"}, 
+        {n:"לי-אור", e:"🫂"}, {n:"איתן", e:"🔥"}, {n:"רני", e:"⚡"}, {n:"נעמי", e:"🏆"}, 
+        {n:"יותם", e:"💬"}, {n:"אלחנן", e:"🤝"}, {n:"עומר", e:"📋"}, {n:"איילה", e:"🌟"}, 
+        {n:"יובל", e:"🌐"}, {n:"מירי", e:"📊"}, {n:"תבור", e:"🍿"}, {n:"אריאל", e:"🦄"}, 
+        {n:"אילי", e:"🤙"}, {n:"עמית", e:"🐘"}, {n:"נועם", e:"🗳️"}
+    ];
+
+    let roomRef, isSpectator = false;
+
+    // טעינת טבלה
+    db.ref('leaderboard').on('value', s => {
+        const lb = s.val() || {};
+        document.getElementById('leaderboard-list').innerHTML = Object.entries(lb)
+            .sort((a,b) => b[1] - a[1])
+            .map(([n, w]) => `<div><b>${n}</b>: ${w}</div>`).join('');
+    });
 
     function joinRoom(spectate) {
-        const code = document.getElementById('room-code').value;
+        const code = document.getElementById('room-code').value.trim();
         if(!code) return alert("הכנס שם חדר");
-        
-        isSpectator = spectate;
         roomRef = db.ref('rooms/' + code);
-        
+        isSpectator = spectate;
         document.getElementById('lobby').classList.add('hidden');
         document.getElementById('game-area').classList.remove('hidden');
+        if(isSpectator) document.getElementById('player-controls').classList.add('hidden');
         
-        // אם הוא צופה - ננטרל את כפתורי השליחה
-        if(isSpectator) {
-            document.getElementById('controls').classList.add('hidden');
-        }
-
-        // האזנה למשחק
+        initBoard();
         roomRef.on('value', s => {
             const data = s.val();
-            // כאן נעדכן את הצ'אט והלוח בזמן אמת לכולם
-            updateUI(data);
+            if(data && data.messages) {
+                document.getElementById('chat').innerHTML = Object.values(data.messages)
+                    .map(m => `<p><b>${m.sender}:</b> ${m.text}</p>`).join('');
+            }
         });
     }
 
-    function updateUI(data) {
-        if(data && data.messages) {
-            const chat = document.getElementById('chat');
-            chat.innerHTML = Object.values(data.messages).map(m => `<p><b>${m.sender}:</b> ${m.text}</p>`).join('');
-        }
+    function initBoard() {
+        const grid = document.getElementById('board-grid');
+        const sel = document.getElementById('guess-select');
+        grid.innerHTML = ''; sel.innerHTML = '';
+        CHARS.forEach(c => {
+            const d = document.createElement('div');
+            d.className = 'card';
+            d.innerHTML = `<span>${c.e}</span><br>${c.n}`;
+            d.onclick = function() { if(!isSpectator) this.classList.toggle('eliminated'); };
+            grid.appendChild(d);
+            sel.innerHTML += `<option value="${c.n}">${c.n}</option>`;
+        });
     }
 
     function sendMessage() {
-        if(isSpectator) return; // צופים לא יכולים לדבר
         const msg = document.getElementById('msg-input').value;
+        if(!msg) return;
         roomRef.child('messages').push({sender: "מנהל", text: msg});
         document.getElementById('msg-input').value = '';
+    }
+
+    function makeGuess() {
+        const guess = document.getElementById('guess-select').value;
+        const name = prompt("מי ניצח? (שם המנהל/ת לניקוד בטבלה)");
+        if(name) {
+            db.ref('leaderboard/' + name).transaction(w => (w || 0) + 1);
+            alert("הניצחון נרשם!");
+        }
     }
 </script>
 </body>
