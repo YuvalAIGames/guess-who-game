@@ -2,55 +2,82 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>טורניר "נחש מי" - מנהלים</title>
+    <title>נחש מי? - גרסת המנהלים</title>
     <style>
         body { font-family: sans-serif; background: #1e3c72; color: #333; padding: 20px; text-align: center; }
         .container { background: white; padding: 20px; border-radius: 20px; max-width: 900px; margin: auto; }
         .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 20px 0; }
-        .card { border: 2px solid #ccc; padding: 10px; cursor: pointer; border-radius: 10px; font-size: 1.2em; transition: 0.2s; }
+        .card { border: 2px solid #ccc; padding: 10px; cursor: pointer; border-radius: 10px; transition: 0.2s; font-size: 1.2em; }
         .card:hover { border-color: #3b82f6; background: #f0f8ff; }
         .eliminated { opacity: 0.2; transform: scale(0.9); }
         .hidden { display: none; }
-        .chat { height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; text-align: right; }
-        #leaderboard { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #1e3c72; }
+        .chat { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; text-align: right; }
+        button { cursor: pointer; }
+        #error-box { color: red; font-weight: bold; margin-bottom: 15px; font-size: 1.1em; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <!-- טבלת ניצחונות -->
-    <div id="leaderboard">
-        <h3>🏆 טבלת הניצחונות של הטורניר 🏆</h3>
-        <div id="leaderboard-list" style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;"></div>
-    </div>
+    <div id="error-box"></div>
 
-    <!-- לובּי -->
-    <div id="lobby">
-        <h1>נחש מי? - גרסת הטורניר</h1>
+    <div id="room-setup">
+        <h1>נחש מי? - גרסת המנהלים</h1>
         <input type="text" id="room-code" placeholder="שם חדר...">
-        <button onclick="joinRoom(false)">שחקן</button>
-        <button onclick="joinRoom(true)">צופה</button>
+        <button onclick="enterRoom()" style="padding: 5px 15px;">היכנס</button>
     </div>
 
-    <!-- אזור המשחק -->
-    <div id="game-area" class="hidden">
+    <div id="character-selection" class="hidden">
+        <h2>בחר את המנהל/ת שלך</h2>
+        <div id="select-grid" class="grid"></div>
+    </div>
+
+    <div id="game-play" class="hidden">
         <h2 id="room-title"></h2>
-        <div class="grid" id="board-grid"></div>
-        <div class="chat" id="chat"></div>
-        <div id="player-controls">
-            <input type="text" id="msg-input" placeholder="שאל/ענה...">
-            <button onclick="sendMessage()">שלח</button>
-            <select id="guess-select"></select>
-            <button onclick="makeGuess()" style="background: red; color: white;">ניחוש סופי!</button>
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 2;">
+                <h3>הלוח שלך</h3>
+                <div id="board-grid" class="grid"></div>
+                <select id="guess-select" style="padding: 5px;"></select>
+                <button onclick="makeGuess()" style="background: red; color: white; padding: 5px 10px; border: none; border-radius: 5px;">בצע ניחוש סופי!</button>
+            </div>
+            <div style="flex: 1;">
+                <div id="chat" class="chat"></div>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="msg-input" placeholder="שאל/ענה..." style="flex: 1; padding: 5px;">
+                    <button onclick="sendMessage()" style="padding: 5px 10px;">שלח</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
+<script>
+    // מערכת ללכידת שגיאות קריסה
+    window.onerror = function(msg, url, line) {
+        document.getElementById('error-box').innerText = "קריסת מערכת: " + msg;
+        return false;
+    };
+</script>
+
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 <script>
-    firebase.initializeApp({ databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com" });
+    if (typeof firebase === 'undefined') {
+        document.getElementById('error-box').innerText = "שגיאה: פיירבייס לא נטען. האם יש לך חוסם פרסומות פועל שמסתיר סקריפטים?";
+    }
+
+    try {
+        firebase.initializeApp({ 
+            databaseURL: "https://nahesh-mi-default-rtdb.firebaseio.com",
+            projectId: "nahesh-mi"
+        });
+    } catch (e) {
+        document.getElementById('error-box').innerText = "שגיאה בהפעלת פיירבייס: " + e.message;
+    }
+    
     const db = firebase.database();
+    
     const CHARS = [
         {n:"הילה", e:"👑"}, {n:"ירין", e:"⚖️"}, {n:"ריי", e:"🎨"}, {n:"אורי", e:"🎯"}, 
         {n:"לי-אור", e:"🫂"}, {n:"איתן", e:"🔥"}, {n:"רני", e:"⚡"}, {n:"נעמי", e:"🏆"}, 
@@ -59,62 +86,142 @@
         {n:"אילי", e:"🤙"}, {n:"עמית", e:"🐘"}, {n:"נועם", e:"🗳️"}
     ];
 
-    let roomRef, isSpectator = false;
+    let roomRef, myRole, roomCode;
 
-    // טעינת טבלה
-    db.ref('leaderboard').on('value', s => {
-        const lb = s.val() || {};
-        document.getElementById('leaderboard-list').innerHTML = Object.entries(lb)
-            .sort((a,b) => b[1] - a[1])
-            .map(([n, w]) => `<div><b>${n}</b>: ${w}</div>`).join('');
-    });
-
-    function joinRoom(spectate) {
-        const code = document.getElementById('room-code').value.trim();
-        if(!code) return alert("הכנס שם חדר");
-        roomRef = db.ref('rooms/' + code);
-        isSpectator = spectate;
-        document.getElementById('lobby').classList.add('hidden');
-        document.getElementById('game-area').classList.remove('hidden');
-        if(isSpectator) document.getElementById('player-controls').classList.add('hidden');
-        
-        initBoard();
-        roomRef.on('value', s => {
-            const data = s.val();
-            if(data && data.messages) {
-                document.getElementById('chat').innerHTML = Object.values(data.messages)
-                    .map(m => `<p><b>${m.sender}:</b> ${m.text}</p>`).join('');
+    function enterRoom() {
+        try {
+            roomCode = document.getElementById('room-code').value.trim();
+            if (!roomCode) {
+                alert("אנא הכנס שם חדר");
+                return;
             }
-        });
+            
+            roomRef = db.ref('rooms/' + roomCode);
+            document.getElementById('room-setup').classList.add('hidden');
+            document.getElementById('character-selection').classList.remove('hidden');
+            
+            const grid = document.getElementById('select-grid');
+            grid.innerHTML = ''; 
+            CHARS.forEach(c => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.innerHTML = `<span style="font-size: 1.5em;">${c.e}</span><br><b>${c.n}</b>`;
+                div.onclick = () => selectMyCharacter(c.n);
+                grid.appendChild(div);
+            });
+
+            roomRef.on('value', s => {
+                const data = s.val();
+                if(data && data.messages) {
+                    const chat = document.getElementById('chat');
+                    chat.innerHTML = Object.values(data.messages).map(m => {
+                        const senderName = m.sender === 'p1' ? 'שחקן 1' : (m.sender === 'p2' ? 'שחקן 2' : 'אורח');
+                        return `<p style="margin: 5px 0;"><b>${senderName}:</b> ${m.text}</p>`;
+                    }).join('');
+                    chat.scrollTop = chat.scrollHeight; 
+                }
+            });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאה בכניסה: " + error.message;
+        }
+    }
+
+    function selectMyCharacter(name) {
+        try {
+            roomRef.transaction(room => {
+                if(!room) {
+                    return { p1: {char: name}, currentTurn: 'p1' };
+                }
+                if(!room.p2) {
+                    room.p2 = {char: name};
+                    return room;
+                }
+                return room;
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    document.getElementById('error-box').innerText = "שגיאת התחברות למסד: " + error.message;
+                    return;
+                }
+                
+                const data = snapshot.val();
+                if (data && data.p1 && data.p1.char === name && (!data.p2 || data.p2.char !== name)) {
+                    myRole = 'p1';
+                } else {
+                    myRole = 'p2';
+                }
+
+                document.getElementById('character-selection').classList.add('hidden');
+                document.getElementById('game-play').classList.remove('hidden');
+                document.getElementById('room-title').innerText = "חדר: " + roomCode;
+                initBoard();
+            });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאה בבחירת דמות: " + error.message;
+        }
     }
 
     function initBoard() {
         const grid = document.getElementById('board-grid');
-        const sel = document.getElementById('guess-select');
-        grid.innerHTML = ''; sel.innerHTML = '';
+        const select = document.getElementById('guess-select');
+        grid.innerHTML = '';
+        select.innerHTML = '';
         CHARS.forEach(c => {
-            const d = document.createElement('div');
-            d.className = 'card';
-            d.innerHTML = `<span>${c.e}</span><br>${c.n}`;
-            d.onclick = function() { if(!isSpectator) this.classList.toggle('eliminated'); };
-            grid.appendChild(d);
-            sel.innerHTML += `<option value="${c.n}">${c.n}</option>`;
+            const div = document.createElement('div');
+            div.className = 'card';
+            div.innerHTML = `<span style="font-size: 1.5em;">${c.e}</span><br><b>${c.n}</b>`;
+            div.onclick = function() { this.classList.toggle('eliminated'); };
+            grid.appendChild(div);
+            select.innerHTML += `<option value="${c.n}">${c.n}</option>`;
         });
     }
 
     function sendMessage() {
-        const msg = document.getElementById('msg-input').value;
-        if(!msg) return;
-        roomRef.child('messages').push({sender: "מנהל", text: msg});
-        document.getElementById('msg-input').value = '';
+        try {
+            const msgInput = document.getElementById('msg-input');
+            const msg = msgInput.value.trim();
+            if (!msg) return; 
+            
+            const sender = myRole || 'unknown'; 
+            
+            roomRef.child('messages').push({sender: sender, text: msg})
+                .then(() => {
+                    roomRef.once('value', s => {
+                        const data = s.val();
+                        if(data && data.currentTurn) {
+                            roomRef.update({currentTurn: data.currentTurn === 'p1' ? 'p2' : 'p1'});
+                        }
+                    });
+                    msgInput.value = '';
+                })
+                .catch(error => {
+                    document.getElementById('error-box').innerText = "שגיאה בשליחת הודעה: " + error.message;
+                });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאת הודעה: " + error.message;
+        }
     }
 
     function makeGuess() {
-        const guess = document.getElementById('guess-select').value;
-        const name = prompt("מי ניצח? (שם המנהל/ת לניקוד בטבלה)");
-        if(name) {
-            db.ref('leaderboard/' + name).transaction(w => (w || 0) + 1);
-            alert("הניצחון נרשם!");
+        try {
+            const guess = document.getElementById('guess-select').value;
+            roomRef.once('value', s => {
+                const data = s.val();
+                if (!data) return;
+                
+                const opponent = myRole === 'p1' ? 'p2' : 'p1';
+                if(!data[opponent]) {
+                    alert("השחקן השני טרם בחר דמות!");
+                    return;
+                }
+                
+                if(data[opponent].char === guess) {
+                    alert("🎉 ניצחת! הדמות אכן הייתה " + guess);
+                } else {
+                    alert("❌ טעות! הדמות הייתה " + data[opponent].char);
+                }
+            });
+        } catch (error) {
+            document.getElementById('error-box').innerText = "שגיאה בניחוש: " + error.message;
         }
     }
 </script>
